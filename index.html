@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BasicWebAligner</title>
+<style>
+:root {
+  --bg:#0f172a; --panel:#111827; --panel2:#1f2937; --text:#e5e7eb;
+  --muted:#9ca3af; --border:#374151; --accent:#22c55e; --accent2:#16a34a;
+  --danger:#ef4444; --a:#22c55e; --c:#3b82f6; --g:#f59e0b;
+  --t:#ef4444; --n:#a78bfa; --gap:#94a3b8; --diff:rgba(239,68,68,.15);
+  --match:rgba(34,197,94,.08); --gapbg:rgba(250,204,21,.28);
+}
+*{box-sizing:border-box}
+body{
+  margin:0; font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  background:var(--bg); color:var(--text)
+}
+.container{max-width:1500px;margin:auto;padding:24px}
+h1{margin:0 0 8px;font-size:28px}
+.subtitle{margin:0 0 20px;color:var(--muted)}
+.panel{
+  background:var(--panel); border:1px solid var(--border); border-radius:14px;
+  padding:16px; box-shadow:0 8px 30px rgba(0,0,0,.18)
+}
+label{display:block;margin-bottom:8px;font-weight:700}
+textarea{
+  width:100%; min-height:330px; resize:vertical; border:1px solid var(--border);
+  background:#020617; color:#d1d5db; border-radius:10px; padding:12px;
+  font-family:"Cascadia Code","Fira Code",Consolas,monospace; font-size:13px;
+  line-height:1.45; outline:none
+}
+textarea:focus{border-color:#64748b}
+.controls{
+  margin-top:16px; display:flex; flex-wrap:wrap; gap:10px; align-items:end
+}
+.control{display:flex;flex-direction:column;gap:6px}
+.control label{font-size:13px;font-weight:600;color:var(--muted);margin:0}
+input[type=number]{
+  width:95px;background:#020617;color:var(--text);border:1px solid var(--border);
+  border-radius:8px;padding:9px 10px
+}
+button{
+  border:0;border-radius:9px;padding:10px 16px;font-weight:700;cursor:pointer;
+  transition:.15s ease
+}
+button.primary{background:var(--accent);color:#052e16}
+button.primary:hover{background:var(--accent2);color:white}
+button.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+button.secondary:hover{background:#334155}
+button:disabled{opacity:.45;cursor:not-allowed}
+.status{margin-top:13px;color:var(--muted);min-height:22px}
+.status.error{color:#fca5a5}
+.result-panel{margin-top:18px}
+.stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px}
+.stat{
+  background:#020617;border:1px solid var(--border);border-radius:9px;
+  padding:8px 11px;font-size:13px
+}
+.navbar{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;
+  position:sticky;top:0;background:var(--panel);padding:8px 0;z-index:10
+}
+.gap-counter{color:var(--muted);font-size:13px}
+.alignment{
+  background:#020617;border:1px solid var(--border);border-radius:12px;
+  padding:14px;overflow:auto;max-height:72vh;scroll-behavior:smooth
+}
+.block{
+  margin-bottom:20px;font-family:"Cascadia Code","Fira Code",Consolas,monospace;
+  font-size:14px;line-height:1.55;white-space:pre
+}
+.row{
+  display:grid;
+  grid-template-columns:max-content auto;
+  gap:18px;
+  min-width:max-content;
+  align-items:start
+}
+.name{
+  color:#cbd5e1;
+  font-weight:700;
+  white-space:nowrap;
+  overflow:visible;
+  text-overflow:clip;
+  position:sticky;
+  left:0;
+  background:#020617;
+  padding-right:10px;
+  z-index:2
+}
+.seq{letter-spacing:.02em}
+.consensus{color:#94a3b8}
+.coords{color:#64748b;font-size:12px}
+.nt{font-weight:700}
+.A{color:var(--a)} .C{color:var(--c)} .G{color:var(--g)} .T{color:var(--t)}
+.N{color:var(--n)} .GAP{color:var(--gap);background:var(--gapbg);border-radius:2px}
+.mismatch{background:var(--diff);border-radius:2px}
+.match{background:var(--match);border-radius:2px}
+.gap-anchor{
+  display:inline-block;width:0;height:1em;position:relative;top:.15em
+}
+.gap-anchor.active::after{
+  content:"";position:absolute;left:-2px;top:-3px;width:4px;height:1.4em;
+  background:#fde047;border-radius:3px;box-shadow:0 0 8px #fde047
+}
+.legend{
+  display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-family:monospace;font-size:13px
+}
+.legend span{font-weight:700}
+.note{color:var(--muted);margin-top:12px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>BasicWebAligner</h1>
+  <p class="subtitle">Pairwise nucleotide sequence alignment directly in your browser, using a global Gotoh alignment with affine gap penalties.</p>
+
+  <div class="panel">
+    <label for="fastaInput">Deux séquences FASTA</label>
+    <textarea id="fastaInput" spellcheck="false">>&gt;sequence_1
+ACTGACCTGATCGATCGATC
+
+&gt;sequence_2
+ACTGACCTGAAAAATCGATCGATC</textarea>
+
+    <div class="controls">
+      <div class="control">
+        <label for="matchScore">Match</label>
+        <input id="matchScore" type="number" step="0.1" value="2">
+      </div>
+      <div class="control">
+        <label for="mismatchScore">Mismatch</label>
+        <input id="mismatchScore" type="number" step="0.1" value="-3">
+      </div>
+      <div class="control">
+        <label for="gapOpenScore">Gap ouverture</label>
+        <input id="gapOpenScore" type="number" step="0.1" value="-10">
+      </div>
+      <div class="control">
+        <label for="gapExtendScore">Gap extension</label>
+        <input id="gapExtendScore" type="number" step="0.1" value="-0.5">
+      </div>
+      <div class="control">
+        <label for="blockSize">Bases / bloc</label>
+        <input id="blockSize" type="number" min="20" max="200" value="80">
+      </div>
+
+      <button id="alignBtn" class="primary">Aligner</button>
+      <button id="clearBtn" class="secondary">Effacer</button>
+      <button id="downloadBtn" class="secondary" disabled>Télécharger FASTA aligné</button>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="legend">
+      <span class="A">A</span><span class="C">C</span><span class="G">G</span>
+      <span class="T">T</span><span class="N">N</span><span class="GAP">- gap</span>
+    </div>
+  </div>
+
+  <div id="results" class="panel result-panel" hidden>
+    <div id="stats" class="stats"></div>
+
+    <div class="navbar">
+      <button id="prevGapBtn" class="secondary" disabled>← Groupe précédent</button>
+      <button id="nextGapBtn" class="secondary" disabled>Groupe suivant →</button>
+      <span id="gapCounter" class="gap-counter">Aucun gap</span>
+    </div>
+
+    <div id="alignment" class="alignment"></div>
+
+    <div class="note">
+      Tout est calculé localement dans ton navigateur. Aucune séquence n’est envoyée à un serveur. Les gaps utilisent une pénalité affine : ouverture coûteuse, extension peu coûteuse.
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const fastaInput = document.getElementById("fastaInput");
+const alignBtn = document.getElementById("alignBtn");
+const clearBtn = document.getElementById("clearBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const prevGapBtn = document.getElementById("prevGapBtn");
+const nextGapBtn = document.getElementById("nextGapBtn");
+const gapCounter = document.getElementById("gapCounter");
+const statusEl = document.getElementById("status");
+const resultsEl = document.getElementById("results");
+const statsEl = document.getElementById("stats");
+const alignmentEl = document.getElementById("alignment");
+
+let lastAlignment = null;
+let gapGroups = [];
+let currentGapIndex = -1;
+
+function parseTwoFastas(text) {
+  const cleaned = text.trim();
+  if (!cleaned) throw new Error("La zone FASTA est vide.");
+
+  const lines = cleaned.split(/\r?\n/);
+  const records = [];
+  let current = null;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    if (line.startsWith(">")) {
+      if (current) records.push(current);
+      current = {
+        name: line.slice(1).trim() || `sequence_${records.length + 1}`,
+        parts: []
+      };
+    } else {
+      if (!current) {
+        throw new Error("Le fichier doit commencer par une ligne d’en-tête FASTA commençant par >.");
+      }
+      current.parts.push(line.replace(/\s+/g, ""));
+    }
+  }
+
+  if (current) records.push(current);
+
+  if (records.length !== 2) {
+    throw new Error(`Il faut exactement deux séquences FASTA. Séquences détectées : ${records.length}.`);
+  }
+
+  return records.map((r, i) => {
+    const sequence = r.parts.join("").toUpperCase().replace(/U/g, "T").replace(/\./g, "-");
+
+    if (!sequence) throw new Error(`La séquence ${i + 1} est vide.`);
+
+    if (!/^[ACGTNRYKMSWBDHV-]+$/.test(sequence)) {
+      throw new Error(`Caractères non reconnus dans ${r.name}. Utilise des nucléotides IUPAC.`);
+    }
+
+    return { name: r.name, sequence };
+  });
+}
+
+function gotohGlobal(seq1, seq2, match, mismatch, gapOpen, gapExtend) {
+  const n = seq1.length;
+  const m = seq2.length;
+  const width = m + 1;
+  const cells = (n + 1) * width;
+  const NEG = -1e100;
+
+  // Etats : 0 = M (nucléotide/nucléotide),
+  //         1 = X (nucléotide seq1 / gap seq2),
+  //         2 = Y (gap seq1 / nucléotide seq2).
+  // On garde un traceback par état. Sur égalité, X et Y préfèrent
+  // continuer le gap existant : cela évite de fragmenter artificiellement
+  // une grande insertion en plusieurs petits gaps.
+  const traceM = new Uint8Array(cells);
+  const traceX = new Uint8Array(cells);
+  const traceY = new Uint8Array(cells);
+
+  let prevM = new Float64Array(width);
+  let prevX = new Float64Array(width);
+  let prevY = new Float64Array(width);
+  let currM = new Float64Array(width);
+  let currX = new Float64Array(width);
+  let currY = new Float64Array(width);
+
+  prevM.fill(NEG);
+  prevX.fill(NEG);
+  prevY.fill(NEG);
+  prevM[0] = 0;
+
+  // Première ligne : uniquement des gaps dans seq1 (état Y).
+  for (let j = 1; j <= m; j++) {
+    prevY[j] = gapOpen + (j - 1) * gapExtend;
+    traceY[j] = (j === 1) ? 0 : 2;
+  }
+
+  for (let i = 1; i <= n; i++) {
+    currM.fill(NEG);
+    currX.fill(NEG);
+    currY.fill(NEG);
+
+    // Première colonne : uniquement des gaps dans seq2 (état X).
+    currX[0] = gapOpen + (i - 1) * gapExtend;
+    traceX[i * width] = (i === 1) ? 0 : 1;
+
+    const a = seq1.charCodeAt(i - 1);
+
+    for (let j = 1; j <= m; j++) {
+      const idx = i * width + j;
+      const b = seq2.charCodeAt(j - 1);
+      const sub = (a === b) ? match : mismatch;
+
+      // M : termine par deux nucléotides alignés.
+      let bestM = prevM[j - 1];
+      let prevStateM = 0;
+      if (prevX[j - 1] > bestM) {
+        bestM = prevX[j - 1];
+        prevStateM = 1;
+      }
+      if (prevY[j - 1] > bestM) {
+        bestM = prevY[j - 1];
+        prevStateM = 2;
+      }
+      currM[j] = bestM + sub;
+      traceM[idx] = prevStateM;
+
+      // X : seq1 consomme une base, seq2 reçoit '-'.
+      // On teste d'abord l'extension afin de la conserver en cas d'égalité.
+      let bestX = prevX[j] + gapExtend;
+      let prevStateX = 1;
+      const openXFromM = prevM[j] + gapOpen;
+      if (openXFromM > bestX) {
+        bestX = openXFromM;
+        prevStateX = 0;
+      }
+      const openXFromY = prevY[j] + gapOpen;
+      if (openXFromY > bestX) {
+        bestX = openXFromY;
+        prevStateX = 2;
+      }
+      currX[j] = bestX;
+      traceX[idx] = prevStateX;
+
+      // Y : seq2 consomme une base, seq1 reçoit '-'.
+      let bestY = currY[j - 1] + gapExtend;
+      let prevStateY = 2;
+      const openYFromM = currM[j - 1] + gapOpen;
+      if (openYFromM > bestY) {
+        bestY = openYFromM;
+        prevStateY = 0;
+      }
+      const openYFromX = currX[j - 1] + gapOpen;
+      if (openYFromX > bestY) {
+        bestY = openYFromX;
+        prevStateY = 1;
+      }
+      currY[j] = bestY;
+      traceY[idx] = prevStateY;
+    }
+
+    [prevM, currM] = [currM, prevM];
+    [prevX, currX] = [currX, prevX];
+    [prevY, currY] = [currY, prevY];
+  }
+
+  let state = 0;
+  let finalScore = prevM[m];
+  if (prevX[m] > finalScore) {
+    finalScore = prevX[m];
+    state = 1;
+  }
+  if (prevY[m] > finalScore) {
+    finalScore = prevY[m];
+    state = 2;
+  }
+
+  let i = n;
+  let j = m;
+  const out1 = [];
+  const out2 = [];
+
+  while (i > 0 || j > 0) {
+    const idx = i * width + j;
+
+    if (state === 0) {
+      // Aux frontières, M n'est pas un état valide.
+      if (i === 0) { state = 2; continue; }
+      if (j === 0) { state = 1; continue; }
+      const previous = traceM[idx];
+      out1.push(seq1[i - 1]);
+      out2.push(seq2[j - 1]);
+      i--;
+      j--;
+      state = previous;
+    } else if (state === 1) {
+      if (i === 0) { state = 2; continue; }
+      const previous = traceX[idx];
+      out1.push(seq1[i - 1]);
+      out2.push("-");
+      i--;
+      state = previous;
+    } else {
+      if (j === 0) { state = 1; continue; }
+      const previous = traceY[idx];
+      out1.push("-");
+      out2.push(seq2[j - 1]);
+      j--;
+      state = previous;
+    }
+  }
+
+  out1.reverse();
+  out2.reverse();
+
+  return {
+    aligned1: out1.join(""),
+    aligned2: out2.join(""),
+    score: finalScore
+  };
+}
+
+function escapeHtml(str) {
+  return str
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function ntClass(nt) {
+  if (nt === "-") return "GAP";
+  if ("ACGTN".includes(nt)) return nt;
+  return "N";
+}
+
+function coloredSequence(seq, other, globalStart) {
+  let html = "";
+
+  for (let i = 0; i < seq.length; i++) {
+    const nt = seq[i];
+    const otherNt = other[i];
+    const globalIndex = globalStart + i;
+
+    let relationClass = "";
+    if (nt === otherNt && nt !== "-") relationClass = " match";
+    else if (nt !== otherNt) relationClass = " mismatch";
+
+    let anchor = "";
+    if (nt === "-" || otherNt === "-") {
+      anchor = `<span id="gap-${globalIndex}" class="gap-anchor" data-gap-pos="${globalIndex}"></span>`;
+    }
+
+    html += `${anchor}<span class="nt ${ntClass(nt)}${relationClass}">${escapeHtml(nt)}</span>`;
+  }
+
+  return html;
+}
+
+function consensusLine(a, b) {
+  let s = "";
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === b[i] && a[i] !== "-") s += "|";
+    else if (a[i] === "-" || b[i] === "-") s += " ";
+    else s += ".";
+  }
+  return s;
+}
+
+function computeStats(a, b) {
+  let matches = 0;
+  let mismatches = 0;
+  let gapColumns = 0;
+  let compared = 0;
+
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] === "-" || b[i] === "-") {
+      gapColumns++;
+      continue;
+    }
+    compared++;
+    if (a[i] === b[i]) matches++;
+    else mismatches++;
+  }
+
+  return {
+    matches,
+    mismatches,
+    gapColumns,
+    identity: compared ? (100 * matches / compared) : 0
+  };
+}
+
+function findGapGroups(a, b) {
+  const groups = [];
+  let start = null;
+
+  for (let i = 0; i < a.length; i++) {
+    const isGap = a[i] === "-" || b[i] === "-";
+
+    if (isGap && start === null) {
+      start = i;
+    }
+
+    const groupEndsHere =
+      start !== null &&
+      (!isGap || i === a.length - 1);
+
+    if (groupEndsHere) {
+      const end = isGap && i === a.length - 1 ? i : i - 1;
+      groups.push({
+        start,
+        end,
+        length: end - start + 1
+      });
+      start = null;
+    }
+  }
+
+  return groups;
+}
+
+function renderAlignment(name1, name2, a, b, blockSize) {
+  alignmentEl.innerHTML = "";
+  const consensus = consensusLine(a, b);
+
+  let pos1 = 0;
+  let pos2 = 0;
+
+  for (let start = 0; start < a.length; start += blockSize) {
+    const end = Math.min(start + blockSize, a.length);
+
+    const chunk1 = a.slice(start, end);
+    const chunk2 = b.slice(start, end);
+    const cons = consensus.slice(start, end);
+
+    const ungapped1 = chunk1.replaceAll("-","").length;
+    const ungapped2 = chunk2.replaceAll("-","").length;
+
+    const startPos1 = ungapped1 ? pos1 + 1 : pos1;
+    const startPos2 = ungapped2 ? pos2 + 1 : pos2;
+
+    pos1 += ungapped1;
+    pos2 += ungapped2;
+
+    const block = document.createElement("div");
+    block.className = "block";
+
+    block.innerHTML = `
+      <div class="row coords">
+        <div class="name"></div>
+        <div class="seq">Alignement ${start + 1} — ${end}</div>
+      </div>
+      <div class="row">
+        <div class="name" title="${escapeHtml(name1)}">${escapeHtml(name1)} [${startPos1}-${pos1}]</div>
+        <div class="seq">${coloredSequence(chunk1, chunk2, start)}</div>
+      </div>
+      <div class="row">
+        <div class="name">Consensus</div>
+        <div class="seq consensus">${escapeHtml(cons)}</div>
+      </div>
+      <div class="row">
+        <div class="name" title="${escapeHtml(name2)}">${escapeHtml(name2)} [${startPos2}-${pos2}]</div>
+        <div class="seq">${coloredSequence(chunk2, chunk1, start)}</div>
+      </div>
+    `;
+
+    alignmentEl.appendChild(block);
+  }
+}
+
+function renderStats(seq1, seq2, aligned, stats) {
+  statsEl.innerHTML = `
+    <div class="stat">Séq. 1 : <strong>${seq1.sequence.length} nt</strong></div>
+    <div class="stat">Séq. 2 : <strong>${seq2.sequence.length} nt</strong></div>
+    <div class="stat">Alignement : <strong>${aligned.aligned1.length} colonnes</strong></div>
+    <div class="stat">Score : <strong>${aligned.score}</strong></div>
+    <div class="stat">Identité : <strong>${stats.identity.toFixed(2)} %</strong></div>
+    <div class="stat">Matches : <strong>${stats.matches}</strong></div>
+    <div class="stat">Mismatches : <strong>${stats.mismatches}</strong></div>
+    <div class="stat">Colonnes avec gap : <strong>${stats.gapColumns}</strong></div>
+  `;
+}
+
+function updateGapButtons() {
+  const hasGaps = gapGroups.length > 0;
+  prevGapBtn.disabled = !hasGaps;
+  nextGapBtn.disabled = !hasGaps;
+
+  if (!hasGaps) {
+    gapCounter.textContent = "Aucun groupe de gap";
+  } else if (currentGapIndex < 0) {
+    gapCounter.textContent =
+      `${gapGroups.length} groupe${gapGroups.length > 1 ? "s" : ""} de gap`;
+  } else {
+    const group = gapGroups[currentGapIndex];
+    const range =
+      group.start === group.end
+        ? `colonne ${group.start + 1}`
+        : `colonnes ${group.start + 1}–${group.end + 1}`;
+
+    gapCounter.textContent =
+      `Groupe ${currentGapIndex + 1} / ${gapGroups.length} — ${range} — ${group.length} gap${group.length > 1 ? "s" : ""}`;
+  }
+}
+function goToGap(index) {
+  if (!gapGroups.length) return;
+
+  if (index < 0) index = gapGroups.length - 1;
+  if (index >= gapGroups.length) index = 0;
+
+  document.querySelectorAll(".gap-anchor.active")
+    .forEach(el => el.classList.remove("active"));
+
+  currentGapIndex = index;
+  const group = gapGroups[currentGapIndex];
+
+  for (let pos = group.start; pos <= group.end; pos++) {
+    document.querySelectorAll(`#gap-${pos}`)
+      .forEach(el => el.classList.add("active"));
+  }
+
+  const firstAnchor = document.querySelector(`#gap-${group.start}`);
+  if (firstAnchor) {
+    firstAnchor.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+      inline: "center"
+    });
+  }
+
+  updateGapButtons();
+}
+function wrapFasta(seq, width=80) {
+  let out = "";
+  for (let i = 0; i < seq.length; i += width) {
+    out += seq.slice(i, i + width) + "\n";
+  }
+  return out;
+}
+
+function downloadAlignment() {
+  if (!lastAlignment) return;
+
+  const content =
+    `>${lastAlignment.name1}\n${wrapFasta(lastAlignment.aligned1)}` +
+    `>${lastAlignment.name2}\n${wrapFasta(lastAlignment.aligned2)}`;
+
+  const blob = new Blob([content], {type:"text/plain;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "BasicWebAligner_alignment.fasta";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function runAlignment() {
+  statusEl.className = "status";
+  statusEl.textContent = "";
+  resultsEl.hidden = true;
+  downloadBtn.disabled = true;
+  gapGroups = [];
+  currentGapIndex = -1;
+  updateGapButtons();
+
+  try {
+    const [seq1, seq2] = parseTwoFastas(fastaInput.value);
+
+    const match = Number(document.getElementById("matchScore").value);
+    const mismatch = Number(document.getElementById("mismatchScore").value);
+    const gapOpen = Number(document.getElementById("gapOpenScore").value);
+    const gapExtend = Number(document.getElementById("gapExtendScore").value);
+    const blockSize = Math.max(
+      20,
+      Math.min(200, Number(document.getElementById("blockSize").value) || 80)
+    );
+
+    if (![match, mismatch, gapOpen, gapExtend].every(Number.isFinite)) {
+      throw new Error("Les scores doivent être numériques.");
+    }
+
+    if (gapOpen > 0 || gapExtend > 0) {
+      throw new Error("Les pénalités de gap doivent être nulles ou négatives.");
+    }
+
+    const cells = (seq1.sequence.length + 1) * (seq2.sequence.length + 1);
+
+    // Gotoh garde trois tracebacks (M/X/Y), donc la mémoire augmente
+    // par rapport à Needleman–Wunsch linéaire. ~30 M cellules ≈ 90 Mo
+    // rien que pour les tracebacks.
+    if (cells > 30_000_000) {
+      throw new Error("Séquences trop longues pour cette version navigateur avec gaps affines.");
+    }
+
+    alignBtn.disabled = true;
+    statusEl.textContent =
+      `Alignement en cours : ${seq1.sequence.length} × ${seq2.sequence.length} bases…`;
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    const t0 = performance.now();
+    const aligned = gotohGlobal(
+      seq1.sequence,
+      seq2.sequence,
+      match,
+      mismatch,
+      gapOpen,
+      gapExtend
+    );
+    const t1 = performance.now();
+
+    const stats = computeStats(aligned.aligned1, aligned.aligned2);
+
+    renderStats(seq1, seq2, aligned, stats);
+    renderAlignment(
+      seq1.name,
+      seq2.name,
+      aligned.aligned1,
+      aligned.aligned2,
+      blockSize
+    );
+
+    gapGroups = findGapGroups(aligned.aligned1, aligned.aligned2);
+    currentGapIndex = -1;
+    updateGapButtons();
+
+    lastAlignment = {
+      name1: seq1.name,
+      name2: seq2.name,
+      aligned1: aligned.aligned1,
+      aligned2: aligned.aligned2
+    };
+
+    resultsEl.hidden = false;
+    downloadBtn.disabled = false;
+
+    statusEl.textContent =
+      `Terminé en ${((t1 - t0) / 1000).toFixed(2)} s — ${gapGroups.length} groupe(s) de gap — Gotoh affine (open ${gapOpen}, extend ${gapExtend}).`;
+
+  } catch (err) {
+    statusEl.className = "status error";
+    statusEl.textContent = err.message || String(err);
+  } finally {
+    alignBtn.disabled = false;
+  }
+}
+
+alignBtn.addEventListener("click", runAlignment);
+
+prevGapBtn.addEventListener("click", () => {
+  goToGap(currentGapIndex < 0 ? gapGroups.length - 1 : currentGapIndex - 1);
+});
+
+nextGapBtn.addEventListener("click", () => {
+  goToGap(currentGapIndex < 0 ? 0 : currentGapIndex + 1);
+});
+
+clearBtn.addEventListener("click", () => {
+  fastaInput.value = "";
+  statusEl.textContent = "";
+  resultsEl.hidden = true;
+  alignmentEl.innerHTML = "";
+  statsEl.innerHTML = "";
+  lastAlignment = null;
+  gapGroups = [];
+  currentGapIndex = -1;
+  downloadBtn.disabled = true;
+  updateGapButtons();
+});
+
+downloadBtn.addEventListener("click", downloadAlignment);
+</script>
+</body>
+</html>
