@@ -68,15 +68,19 @@ button:disabled{opacity:.45;cursor:not-allowed}
   padding:14px;overflow:auto;max-height:72vh;scroll-behavior:smooth
 }
 .block{
-  margin-bottom:20px;font-family:"Cascadia Code","Fira Code",Consolas,monospace;
-  font-size:14px;line-height:1.55;white-space:pre
+  margin-bottom:20px;
+  font-family:"Cascadia Code","Fira Code",Consolas,monospace;
+  font-size:14px;
+  line-height:1.55;
+  white-space:pre;
+  display:grid;
+  grid-template-columns:max-content max-content;
+  column-gap:18px;
+  min-width:max-content;
+  font-variant-ligatures:none
 }
 .row{
-  display:grid;
-  grid-template-columns:max-content auto;
-  gap:18px;
-  min-width:max-content;
-  align-items:start
+  display:contents;
 }
 .name{
   color:#cbd5e1;
@@ -90,7 +94,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
   padding-right:10px;
   z-index:2
 }
-.seq{letter-spacing:.02em}
+.seq{letter-spacing:0}
 .consensus{color:#94a3b8}
 .coords{color:#64748b;font-size:12px}
 .nt{font-weight:700}
@@ -119,7 +123,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
   <div class="panel">
     <label for="fastaInput">Deux séquences FASTA</label>
-    <textarea id="fastaInput" spellcheck="false">>&gt;sequence_1
+    <textarea id="fastaInput" spellcheck="false">&gt;sequence_1
 ACTGACCTGATCGATCGATC
 
 &gt;sequence_2
